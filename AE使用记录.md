@@ -14,9 +14,13 @@
   - 渲染队列（在AE内渲染）：视频中用了 `QuickTime - Apple ProRes 422HQ` （我只尝试`QuickTime - 动画`，体积比较大）
   - 创建模板：点击输出模块三角形，保存设置模板。
   - 关于alpha视频的渲染设置：目前用不上先不管。
-  - 另一种渲染mp4，导出到 `Adobe Media Encoder` 渲染，需要安装后者，还没尝试过。
+  - 另一种渲染mp4，导出到 `Adobe Media Encoder` 渲染。适合 `H264` ，试了下默认的，质量、大小和渲染速度都比较合适。渲染时内存占用不高，可以干别的，推荐。（如果报错，可以直接打开AME导入AE项目选择合成）
 
 ## 脚本
 
 **批量导入脚本**：试用了几款，最后从插入方便，简洁等角度选择了Transcriptive SRT Importer
 
+**自动截取声音片段**：VØID - Silence Remover 可以选择是否保留空隙，反转。
+- 参数经验：padding越大保留两侧越多；tolerance越小声音越多 `13, 0.6` 比较好。
+
+**去除空隙**：removeGap.jsx 可以去除空隙，目前执行单次，不能连续执行。
