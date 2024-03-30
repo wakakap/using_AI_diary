@@ -51,36 +51,28 @@
 ## 各种专题
 
 ### BPM
-想实现输入一个BPM，然后某个layer能在每个hit处进行动画。目前的实现方法是：利用 [Tempo Marker Creator](https://note.com/iribo/n/n4a43ac1ab338) 脚本输入BPM生成一个布满标记的solid。之后，例如我想要 layer1 的图形在x轴移动的动画在每次遇到标记都做一遍。则在在做好动画后， `alt+左键` x position，脚本：
+想实现输入一个BPM，然后某个layer能在每个hit处进行动画。目前的实现方法是：利用 [Tempo Marker Creator](https://note.com/iribo/n/n4a43ac1ab338) 脚本输入BPM生成一个布满标记的solid。之后，例如我想要 layer1 的图形在x轴移动的动画在每次遇到标记都做一遍。则在在做好动画后， `alt+左键` x position，填入：
 ```
 var otherLayer = thisComp.layer("Tempo Markers (131 [bpm] / 4 / 0 [s])"); // 获取另一个名为 "name" 的 layer
-var marker = otherLayer.marker;
-var n = 1;
-var nearestMarkerIndex = null;
+var markers = otherLayer.marker;
+var i = markers.nearestKey(time).index;
 
-// 寻找最近的标记
-for (var i = 1; i <= marker.numKeys; i++) {
-    var currentMarkerName = marker.key(i).comment;
-    if (currentMarkerName.match(/^\d+_\d+$/)) { // 检查标记名称是否符合 "1_1" 格式
-        if (nearestMarkerIndex === null || Math.abs(marker.key(i).time - time) < Math.abs(marker.key(nearestMarkerIndex).time - time)) {
-            nearestMarkerIndex = i;
-        }
-    }
+// 检查标记名称是否符合 "x_1" 格式 且当前时间超过了这个mark时间，进行赋值
+while (i > 1 && (!markers.key(i).comment.match(/^\d+_1+$/) || time < markers.key(i).time)) {
+    i--;
 }
-
-if (nearestMarkerIndex !== null) {
-    n = nearestMarkerIndex;
+t = time - markers.key(i).time;
+if(i==1 && !markers.key(i).comment.match(/^\d+_1+$/)){ //这里是避免第一个不符合时也会播放的情况
+  t=20000;
 }
-
-var t = time - marker.key(n).time;
-thisProperty.valueAtTime(t);
-
+thisProperty.valueAtTime(t)
 ```
 
 其中匹配的内容根据具体情况修改，这个脚本是我根据 [这个频道](https://www.youtube.com/watch?v=IOoj3t6vhwU) 提供的：
+
 ```
 n = marker.nearestKey(time).index;
-if (time < marker.key(n).time){
+if (time < marker.key(n).time){//如果在当前时间之后，要取前一个
 n = n-1;
 }
 if(n==0){
@@ -89,4 +81,89 @@ n = 1
 t = time - marker.key(n).time;
 thisProperty.valueAtTime(t)
 ```
-修改的。注意，我并没有完全理解，初试时动画关键帧的位置or距离会影响能否正常显示，应该是chatgpt改得不够好。
+修改的。总的来说，这段代码的功能是找到当前时间之前的与当前时间最接近的标记，再满足两个条件（标记为x_1；在当前时间之前），然后返回该标记对应的属性值。注意AE的layer上的js代码执行逻辑，由于每个时刻都会重新运行代码，那么 `var n = 1` 会在每个时刻重新运行，也就是说n不能存储之前时刻存储的值，每个时刻代码运行是独立的。
+
+这个功能对做音乐视觉效果可能很有用，例如可以用类似字幕srt文件的（名称，时刻，持续时间）数据组转换成marker，然后修改脚本，不同的名称控制不同的动画。
+
+### txt文件转marker
+
+由于现成的「srt文件转AE字幕」的脚本已经有比较成熟的了，我接下了只需要做一个生成srt文件的软件即可。这里考虑两种途径：
+- 将OSU等音游的谱面源码转换成srt
+- 做一个键盘敲击软件，记录成srt
+
+写一个python语言的软件，要求点击start后开始计时，并且实时监测用户输入键盘d，f，j，k，空格键的情况，其他键忽略。记录内容为（输入键盘名，按下的时间，抬起的时间）这三个要素。点击stop后，停止记录，并按照srt字幕文件格式把记录写入一个output.srt文件中，输入键盘名作为字幕内容写入，按下的时间和抬起的时间正好对应字幕的起始和终止时间。注意一些事项，每个按键记录互相不影响，即使时间上有重合也可以写入srt，不要担心这一点。请告诉我完整代码。……
+
+这个工具目前还有改进空间：给每个按键赋予名字，使得写入srt时是可读的内容而不仅仅是键名称；start按下时和音乐有一定错位，只能靠后期校对，目前没想到怎么解决（从按下第一个键位开始计时）；
+
+### 实现打call动画
+
+基础思路：comment代表打call类型（高举的，低举的，强力的，柔和的等）
+
+这里我想了两种实现打call动画的方案
+- 搜索最近marker，根据不同comment播放不同动画，这个原理和上面bpm一样。是脉冲式动画。
+  - 按键时间-time-播放动画时刻
+  - 按键名-comment-打call类型：高举的，低举的，强力的，柔和的，特殊动作等
+  - 按键时长-duration-用来判定强弱？
+  - **优劣势**：坏处是例如强弱弱弱就需要拆成4个脉冲动作，展示可能不连续（用淡入淡出中和？），而且需要两个按键jkkk实现，能否j（长按）j（短）j（短）j（短）实现？但这样需要判定duration数值，看上去很麻烦。
+- 用脚本根据marker情况给一个layer上的不同属性的时间轴上打上关键帧。是连续的一个动画。
+  - 按键时间-time-某个关键帧时刻
+  - 按键名-comment-打call类型：决定关键帧属性
+  - 按键时长-duration-决定关键帧属性的赋值数值
+  - **优劣势**：同一个动画，不能出现覆盖的情况。属性关键帧之间的动作用脚本写，可能效果不好，如何调整似乎很麻烦。
+
+我还是使用了第一种策略：
+- srt文件的处理很费时间，因为我经常打出有时间重合的文件，所以要清洗数据。这次尝试 `j` 代表轻柔呼吸灯，`i` 代表重拍呼吸灯，`o` 和 `p` 代表星星点点的灯。
+- 轻柔呼吸灯
+  ```
+  var otherLayer = thisComp.layer("Captions"); // 获取另一个名为 "name" 的 layer
+  var markers = otherLayer.marker;
+  var i = markers.nearestKey(time).index;
+  // 检查标记名称是否符合 "x_1" 格式 且当前时间超过了这个mark时间，进行赋值
+  while (i > 1 && (markers.key(i).comment !== "j"|| time < markers.key(i).time)) {
+      i--;
+  }
+
+  t = time - markers.key(i).time;
+  if(i==1 && markers.key(i).comment !== "j"){
+	  t=20000;
+  }
+  thisProperty.valueAtTime(t)
+  ```
+- 重拍呼吸灯 把上面的 `markers.key(i).comment !== "j"`的 `j` 改为 `i` 即可。
+- 星灯：这个有两个部分，我找到了解决思路，sumcomp-starpre-star-shape star，的结构，在starpre中添加marker图层，然后打开timeremap，控制闪烁时间：
+  ```
+  var otherLayer = thisComp.layer("Captions"); // 获取另一个名为 "name" 的 layer
+  var markers = otherLayer.marker;
+  var i = markers.nearestKey(time).index;
+
+  // 注意既不是 "o" 也不是 "p" 的情况或当前时间超过了这个mark时间，进行前移
+  while (i > 1 && ((markers.key(i).comment !== "o" && markers.key(i).comment !== "p")|| time < markers.key(i).time)) {
+      i--;
+  }
+  t = time - markers.key(i).time;
+  if(i==1 && markers.key(i).comment !== "o" && markers.key(i).comment !== "p"){
+	  t=20000;
+  }
+  thisProperty.valueAtTime(t)
+  ```
+  在sumcomp用随机函数确定位置，也要读取marker来确定何时改变种子。
+  ```
+  var refLayer = thisComp.layer("Captions"); 
+  if (refLayer.marker.numKeys > 0) {
+      var closestMarkerTime = refLayer.marker.key(1).time; // 假设最接近的标记为第一个标记
+      var seed = 1; // 默认的种子值
+      for (var i=1; i <= refLayer.marker.numKeys; i++) {
+          if (Math.abs(time - refLayer.marker.key(i).time) < Math.abs(time - closestMarkerTime) && (refLayer.marker.key(i).comment == 'o' || refLayer.marker.key(i).comment == 'p')) {
+              closestMarkerTime = refLayer.marker.key(i).time; // 找到更接近当前时间的标记
+              seed = i; // 更新种子值为当前标记的索引
+          }
+      }
+      seedRandom(seed, true);
+      x = random(0, 1920);
+      y = random(0, 1080);
+  } else {
+      x = value[0]; // 如果没有标记
+      y = value[0]; // 如果没有标记
+  }
+  [x, y]
+  ```
