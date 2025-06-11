@@ -283,10 +283,9 @@ def text_to_speech_gpt_sovits_thread(text_to_synthesize):
     # 2. 从UI获取参考相关参数的值，并去除首尾空格
     if app_settings.USE_REFERENCE_AUDIO.get():
         # 如果勾选了，才添加参考相关的参数
-        ref_audio_path = app_settings.REFERENCE_AUDIO_PATH.get().strip()
-        prompt_text = app_settings.PROMPT_TEXT.get().strip()
-        prompt_lang_str = app_settings.PROMPT_LANGUAGE.get().strip()
-
+        ref_audio_path = app_settings.REFERENCE_AUDIO_PATH.get()
+        prompt_text = app_settings.PROMPT_TEXT.get()
+        prompt_lang_str = app_settings.PROMPT_LANGUAGE.get()
         # 只要有值就添加，增加灵活性
         if ref_audio_path:
             payload['ref_audio_path'] = ref_audio_path
@@ -295,9 +294,9 @@ def text_to_speech_gpt_sovits_thread(text_to_synthesize):
         if prompt_lang_str:
             payload['prompt_lang'] = lang_map.get(prompt_lang_str, prompt_lang_str.lower())
     else:
-        payload['ref_audio_path'] = None
-        payload['prompt_text'] = None
-        payload['prompt_lang'] = None
+        payload['ref_audio_path'] = None  # 使用 None 对象
+        payload['prompt_text'] = ""       # 这个是正确的，因为模型默认值就是 ""
+        payload['prompt_lang'] = None   # 使用 None 对象
     try:
         response = requests.post(api_url, json=payload, timeout=90)
         if response.ok and 'audio/wav' in response.headers.get('Content-Type', ''):
